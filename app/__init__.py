@@ -18,7 +18,7 @@ def create_app():
 
     app = Flask(__name__, template_folder="../templates")
     app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "supersecretkey")
-    app.config["MONGO_URI"] = os.environ.get("MONGO_URI", "mongodb://localhost:27017/dsa_tracker")
+    app.config["MONGO_URI"] = os.environ.get("MONGO_URI", "mongodb://localhost:27017/450_dsa")
 
     mongo.init_app(app)
     bcrypt.init_app(app)
