@@ -52,10 +52,14 @@ def generate_progress_card(name, c_score, dsa_progress, current_streak, platform
     draw.text((40, 280), "Platforms:", font=font_label, fill=(161, 161, 170))
     
     plat_components = []
-    if platforms.get('LeetCode', 0) > 0: plat_components.append(f"LeetCode: {platforms['LeetCode']}")
-    if platforms.get('GFG', 0) > 0: plat_components.append(f"GFG: {platforms['GFG']}")
-    if platforms.get('Coding Ninjas', 0) > 0: plat_components.append(f"Coding Ninjas: {platforms['Coding Ninjas']}")
-    if platforms.get('HackerRank', 0) > 0: plat_components.append(f"HackerRank: {platforms['HackerRank']}")
+    if platforms.get('LeetCode', 0) > 0:
+        plat_components.append(f"LeetCode: {platforms['LeetCode']}")
+    if platforms.get('GFG', 0) > 0:
+        plat_components.append(f"GFG: {platforms['GFG']}")
+    if platforms.get('Coding Ninjas', 0) > 0:
+        plat_components.append(f"Coding Ninjas: {platforms['Coding Ninjas']}")
+    if platforms.get('HackerRank', 0) > 0:
+        plat_components.append(f"HackerRank: {platforms['HackerRank']}")
     
     plat_str = " | ".join(plat_components)
     if not plat_str:

@@ -148,7 +148,7 @@ def public_card(user_id):
     from bson.objectid import ObjectId
     try:
         user = db.user.find_one({"_id": ObjectId(user_id)})
-    except:
+    except Exception:
         return "Invalid User ID", 400
         
     if not user:
