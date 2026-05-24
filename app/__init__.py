@@ -11,7 +11,7 @@ from app.auth import auth_bp
 from app.faq import faq_bp
 from app.extensions import bcrypt, db, limiter, login_manager, mongo, oauth, cache
 from app.leaderboard import leaderboard_bp
-from app.public.routes import public_bp
+from app.web.routes import public_bp
 from app.profile import profile_bp
 from app.search import search_bp
 from app.tracker import tracker_bp
