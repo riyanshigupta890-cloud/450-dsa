@@ -4,6 +4,7 @@ from flask_login import current_user, login_required
 
 from app.extensions import db
 from app.leaderboard.cache import invalidate_leaderboard_cache
+from app.profile.card_service import warm_public_card_cache
 from app.utils import json_error, json_success, utc_now
 from calendar_export import build_study_plan_ics
 from notes_export import build_all_notes_markdown, build_topic_notes_markdown, topic_notes_filename
@@ -276,6 +277,7 @@ def update_question(question_id):
         db.user.update_one({"_id": user_id}, {"$set": update_fields})
         current_user.reload()
         invalidate_leaderboard_cache()
+        warm_public_card_cache(user_id, db_handle=db)
         return json_success(message=message)
 
     return json_success(message="No changes made")
