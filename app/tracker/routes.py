@@ -4,7 +4,7 @@ from flask_login import current_user, login_required
 
 from app.extensions import db
 from app.leaderboard.cache import invalidate_leaderboard_cache
-from app.utils import json_error, json_success, utc_now
+from app.utils import json_error, json_success, question_editorial_links, utc_now
 from notes_export import build_all_notes_markdown, build_topic_notes_markdown, topic_notes_filename
 from progress_export import build_progress_csv
 
@@ -29,6 +29,7 @@ TOPIC_PAGE_QUESTION_PROJECTION = {
     "difficulty": 1,
     "url": 1,
     "url2": 1,
+    "editorial_links": 1,
 }
 TOPIC_NOTES_EXPORT_PROJECTION = {"problem": 1}
 QUESTION_STATUS_PROJECTION = {"problem": 1}
@@ -37,6 +38,7 @@ BOOKMARKS_QUESTION_PROJECTION = {
     "problem": 1,
     "url": 1,
     "url2": 1,
+    "editorial_links": 1,
 }
 CSV_EXPORT_QUESTION_PROJECTION = {
     "topic": 1,
@@ -94,6 +96,8 @@ def topic(topic_id):
         return "Topic not found", 404
 
     questions = list(db.question.find({"topic": topic_doc["_id"]}, TOPIC_PAGE_QUESTION_PROJECTION))
+    for question in questions:
+        question["editorial_links"] = question_editorial_links(question)
     progress_dict = current_user.progress if current_user.is_authenticated else {}
     
     # Calculate counts based on the unfiltered list of questions
