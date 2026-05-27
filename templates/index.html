@@ -229,6 +229,63 @@
 .topic-skeleton-card {
     min-height: 160px;
 }
+.widget-controls {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+.widget-controls-label {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    margin-right: 4px;
+    text-transform: uppercase;
+}
+.widget-toggle-input {
+    height: 1px;
+    opacity: 0;
+    position: absolute;
+    width: 1px;
+}
+.widget-toggle-label,
+.widget-reset-btn {
+    align-items: center;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: inline-flex;
+    font-family: inherit;
+    font-size: 0.78rem;
+    font-weight: 600;
+    gap: 6px;
+    min-height: 32px;
+    padding: 5px 11px;
+    transition: border-color 0.15s, color 0.15s, opacity 0.15s;
+}
+.widget-reset-btn {
+    min-width: 34px;
+    padding: 5px 9px;
+}
+.widget-toggle-label:hover,
+.widget-toggle-input:focus-visible + .widget-toggle-label,
+.widget-toggle-input:checked + .widget-toggle-label,
+.widget-reset-btn:hover,
+.widget-reset-btn:focus-visible {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+.widget-toggle-input:not(:checked) + .widget-toggle-label {
+    opacity: 0.55;
+}
+#widget-controls:has(#widget-progress:not(:checked)) ~ #overall-progress,
+#widget-controls:has(#widget-topics:not(:checked)) ~ #topics-grid {
+    display: none;
+}
 </style>
 {% endblock %}
 
@@ -249,6 +306,23 @@
     <h1>DSA Topics</h1>
     <p>Track your progress across all 450 DSA questions</p>
 </div>
+
+<form class="widget-controls" id="widget-controls" aria-label="Dashboard widgets">
+    <span class="widget-controls-label">Widgets</span>
+    <input class="widget-toggle-input" type="checkbox" id="widget-progress" checked>
+    <label class="widget-toggle-label" for="widget-progress">
+        <i class="bi bi-bar-chart" aria-hidden="true"></i>
+        <span>Progress</span>
+    </label>
+    <input class="widget-toggle-input" type="checkbox" id="widget-topics" checked>
+    <label class="widget-toggle-label" for="widget-topics">
+        <i class="bi bi-grid-3x3-gap" aria-hidden="true"></i>
+        <span>Topics</span>
+    </label>
+    <button type="reset" class="widget-reset-btn" id="widget-reset" aria-label="Reset widgets">
+        <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>
+    </button>
+</form>
 
 {% set percentage = 0 %}
 {% if total_questions > 0 %}
