@@ -124,6 +124,12 @@
         {% if user.atcoder_username %}<i class="bi bi-check-circle-fill check-ok" aria-hidden="true"></i><a href="{{ user.atcoder_username | platform_url('atcoder') }}" target="_blank" rel="noopener noreferrer" class="link-out" aria-label="AtCoder profile (opens in new tab)"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i></a>{% else %}<a href="#" class="link-out" onclick="openSyncModal();return false;" aria-label="Connect AtCoder account"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i></a>{% endif %}
       </span>
     </div>
+    <div class="platform-row">
+      <span><i class="bi bi-fire" style="color:#b1361e;margin-right:6px" aria-hidden="true"></i>Codewars</span>
+      <span style="display:flex;align-items:center;gap:6px">
+        {% if user.codewars_username %}<i class="bi bi-check-circle-fill check-ok" aria-hidden="true"></i><a href="{{ user.codewars_username | platform_url('codewars') }}" target="_blank" rel="noopener noreferrer" class="link-out" aria-label="Codewars profile (opens in new tab)"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i></a>{% else %}<a href="#" class="link-out" onclick="openSyncModal();return false;" aria-label="Connect Codewars account"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i></a>{% endif %}
+      </span>
+    </div>
     <button class="add-btn ui-btn ui-btn-secondary ui-btn-block" onclick="openSyncModal()" aria-label="Add or connect coding platform accounts"><i class="bi bi-plus" aria-hidden="true"></i> Add Platform</button>
     <div class="sec-title" style="margin-top:14px">Development Stats</div>
     <div class="platform-row">
@@ -301,7 +307,7 @@
       <div class="donut-inner">{{ global_total_solved }}</div>
     </div>
     <div>
-      {% for name in ['LeetCode', 'GFG', 'Coding Ninjas', 'HackerRank', 'AtCoder'] %}
+      {% for name in ['LeetCode', 'GFG', 'Coding Ninjas', 'HackerRank', 'AtCoder', 'Codewars'] %}
       <div class="legend-item">
         <span><span class="legend-dot" style="background:{{ PLATFORM_META[name].brand_color }}"></span><span style="color:{{ PLATFORM_META[name].brand_color }};font-weight:700">{{ name }}</span></span>
         <strong>{{ platforms[name] }}</strong>
@@ -379,6 +385,8 @@
     <input class="m-inp" id="hr_username" placeholder="e.g. hacker" value="{{ user.hackerrank_username or '' }}">
     <label class="m-lbl"><i class="bi bi-trophy" style="color:#f97316;margin-right:4px"></i>AtCoder Username</label>
     <input class="m-inp" id="ac_username" placeholder="e.g. tourist" value="{{ user.atcoder_username or '' }}">
+    <label class="m-lbl"><i class="bi bi-fire" style="color:#b1361e;margin-right:4px"></i>Codewars Username</label>
+    <input class="m-inp" id="cw_username" placeholder="e.g. g964" value="{{ user.codewars_username or '' }}">
     <div class="m-note">GFG and Coding Ninjas sync are experimental and may take a few seconds.</div>
     <div class="m-actions">
       <button class="m-cancel" onclick="closeSyncModal()">Cancel</button>
@@ -507,8 +515,9 @@ window.handleQuickSync = function(btn) {
   const hr = '{{ user.hackerrank_username or "" }}';
   const cn = '{{ user.codingninjas_username or "" }}';
   const ac = '{{ user.atcoder_username or "" }}';
+  const cw = '{{ user.codewars_username or "" }}';
   
-  if(!lc && !gh && !gfg && !hr && !cn && !ac){
+  if(!lc && !gh && !gfg && !hr && !cn && !ac && !cw){
     showToast('⚠️ No platforms connected to sync!');
     return;
   }
@@ -520,7 +529,7 @@ window.handleQuickSync = function(btn) {
   fetch(endpointConfig.syncPlatforms, {
     method:'POST',
     headers:{'Content-Type':'application/json','X-CSRFToken':csrfToken},
-    body:JSON.stringify({leetcode:lc,github:gh,gfg:gfg,hackerrank:hr,codingninjas:cn,atcoder:ac})
+    body:JSON.stringify({leetcode:lc,github:gh,gfg:gfg,hackerrank:hr,codingninjas:cn,atcoder:ac,codewars:cw})
   })
   .then(r => r.json())
   .then(res => {
@@ -548,7 +557,8 @@ window.handleSyncProfile = function(btn){
   const hr=document.getElementById('hr_username').value.trim();
   const cn=document.getElementById('cn_username').value.trim();
   const ac=document.getElementById('ac_username').value.trim();
-  if(!lc && !gh && !gfg && !hr && !cn && !ac){showToast('\u26a0\ufe0f Enter at least one username');return;}
+  const cw=document.getElementById('cw_username').value.trim();
+  if(!lc && !gh && !gfg && !hr && !cn && !ac && !cw){showToast('\u26a0\ufe0f Enter at least one username');return;}
 
   // Disable button & show spinner
   window.setButtonBusyState(btn, syncContent, { busy: true, busyLabel: 'Syncing...' });
@@ -565,7 +575,8 @@ window.handleSyncProfile = function(btn){
     {id:'ss_gfg', label:'GFG', value:gfg},
     {id:'ss_hr', label:'HackerRank', value:hr},
     {id:'ss_cn', label:'Coding Ninjas', value:cn},
-    {id:'ss_ac', label:'AtCoder', value:ac}
+    {id:'ss_ac', label:'AtCoder', value:ac},
+    {id:'ss_cw', label:'Codewars', value:cw}
   ];
   const activeSyncPlatforms=syncPlatforms.filter(platform=>platform.value);
   const stepsContainer=document.getElementById('syncSteps');
@@ -593,7 +604,7 @@ window.handleSyncProfile = function(btn){
   fetch(endpointConfig.syncPlatforms,{
     method:'POST',
     headers:{'Content-Type':'application/json','X-CSRFToken':csrfToken},
-    body:JSON.stringify({leetcode:lc,github:gh,gfg:gfg,hackerrank:hr,codingninjas:cn,atcoder:ac}),
+    body:JSON.stringify({leetcode:lc,github:gh,gfg:gfg,hackerrank:hr,codingninjas:cn,atcoder:ac,codewars:cw}),
     signal:ctrl.signal
   })
   .then(r=>{clearTimeout(timer);return r.json();})

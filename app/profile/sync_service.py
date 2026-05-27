@@ -4,6 +4,7 @@ from app.leaderboard.cache import invalidate_leaderboard_cache
 from app.platforms.fetchers import (
     fetch_atcoder,
     fetch_coding_ninjas,
+    fetch_codewars,
     fetch_gfg,
     fetch_github,
     fetch_hr_badges,
@@ -46,6 +47,7 @@ def build_platform_sync_jobs(
     codingninjas_username="",
     hackerrank_username="",
     atcoder_username="",
+    codewars_username="",
 ):
     jobs = {}
 
@@ -82,6 +84,9 @@ def build_platform_sync_jobs(
     if atcoder_username:
         jobs["atcoder"] = lambda: fetch_atcoder(atcoder_username)
 
+    if codewars_username:
+        jobs["codewars"] = lambda: fetch_codewars(codewars_username)
+
     return jobs
 
 
@@ -110,6 +115,7 @@ def sync_user_platforms(user, data, db_handle, cache_backend, now=None):
     hackerrank_username = user.hackerrank_username or ""
     codingninjas_username = user.codingninjas_username or ""
     atcoder_username = user.atcoder_username or ""
+    codewars_username = getattr(user, "codewars_username", "") or ""
 
     if "leetcode" in data:
         leetcode_username = data.get("leetcode", "").strip()
@@ -129,6 +135,9 @@ def sync_user_platforms(user, data, db_handle, cache_backend, now=None):
     if "atcoder" in data:
         atcoder_username = data.get("atcoder", "").strip()
         update_fields["atcoder_username"] = atcoder_username
+    if "codewars" in data:
+        codewars_username = data.get("codewars", "").strip()
+        update_fields["codewars_username"] = codewars_username
 
     combined_daily_counts = {}
     platform_totals = {}
@@ -147,6 +156,7 @@ def sync_user_platforms(user, data, db_handle, cache_backend, now=None):
         codingninjas_username=codingninjas_username,
         hackerrank_username=hackerrank_username,
         atcoder_username=atcoder_username,
+        codewars_username=codewars_username,
     )
     platform_results, platform_errors = run_fetch_jobs(platform_jobs, max_workers=4)
 
@@ -256,6 +266,19 @@ def sync_user_platforms(user, data, db_handle, cache_backend, now=None):
                 platform_totals["AtCoder"] = int(atcoder_data.get("total", 0))
     else:
         _mark("atcoder", "skipped")
+
+    if codewars_username:
+        codewars_data = platform_results.get("codewars")
+        if platform_errors.get("codewars"):
+            _mark("codewars", "failed", "Failed to fetch Codewars stats.")
+        elif not codewars_data:
+            _mark("codewars", "failed", "No data returned (username may be invalid or rate-limited).")
+        else:
+            _mark("codewars", "synced")
+            if codewars_data.get("total") is not None:
+                platform_totals["Codewars"] = int(codewars_data.get("total", 0))
+    else:
+        _mark("codewars", "skipped")
 
     update_fields["external_daily_counts"] = combined_daily_counts
     update_fields["external_totals"] = platform_totals

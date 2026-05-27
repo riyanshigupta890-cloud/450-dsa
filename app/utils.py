@@ -86,6 +86,8 @@ def platform_profile_url(username, platform):
         return f"https://github.com/{username}"
     if platform == "atcoder":
         return f"https://atcoder.jp/users/{username}"
+    if platform == "codewars":
+        return f"https://www.codewars.com/users/{username}"
     return "#"
 
 
@@ -131,8 +133,8 @@ def search_dsa_questions(raw_query, limit=40):
     return search_service.search_dsa_questions(raw_query, limit=limit, db_handle=db)
 
 
-EXTERNAL_SOLVED_TOTAL_KEYS = ("LeetCode", "GFG", "Coding Ninjas", "HackerRank", "AtCoder")
-PLATFORM_COUNT_KEYS = ("LeetCode", "GFG", "Coding Ninjas", "HackerRank", "AtCoder", "Other")
+EXTERNAL_SOLVED_TOTAL_KEYS = ("LeetCode", "GFG", "Coding Ninjas", "HackerRank", "AtCoder", "Codewars")
+PLATFORM_COUNT_KEYS = ("LeetCode", "GFG", "Coding Ninjas", "HackerRank", "AtCoder", "Codewars", "Other")
 
 
 def empty_platform_counts():
@@ -221,6 +223,7 @@ def compute_c_score(user_doc, all_questions=None):
     gfg_total = coerce_non_negative_number(ext.get("GFG", 0))
     hr_total = coerce_non_negative_number(ext.get("HackerRank", 0))
     cn_total = coerce_non_negative_number(ext.get("Coding Ninjas", 0))
+    cw_total = coerce_non_negative_number(ext.get("Codewars", 0))
     external_total = sum(
         coerce_non_negative_number(value)
         for key, value in ext.items()
@@ -247,7 +250,7 @@ def compute_c_score(user_doc, all_questions=None):
     s_lc_total = min(lc_total / 500, 1.0) * 200
     s_lc_diff = min((lc_easy * 1 + lc_medium * 3 + lc_hard * 6) / 1500, 1.0) * 150
     s_lc_rating = min(lc_rating / 2500, 1.0) * 200
-    s_other = min((gfg_total + hr_total + cn_total) / 300, 1.0) * 100
+    s_other = min((gfg_total + hr_total + cn_total + cw_total) / 300, 1.0) * 100
     s_consistency = min(active_days / 365, 1.0) * 100
 
     c_score = int(round(s_dsa + s_lc_total + s_lc_diff + s_lc_rating + s_other + s_consistency))
@@ -266,6 +269,7 @@ def compute_c_score(user_doc, all_questions=None):
         "gfg_total": gfg_total,
         "hr_total": hr_total,
         "cn_total": cn_total,
+        "cw_total": cw_total,
         "active_days": active_days,
         "total_solved": global_total,
     }
@@ -305,5 +309,6 @@ def merge_platform_counts(in_sheet_counts, external_totals):
         coerce_non_negative_number(ext_totals.get("HackerRank", 0)),
     )
     platforms["AtCoder"] = max(platforms["AtCoder"], coerce_non_negative_number(ext_totals.get("AtCoder", 0)))
+    platforms["Codewars"] = max(platforms["Codewars"], coerce_non_negative_number(ext_totals.get("Codewars", 0)))
 
     return platforms

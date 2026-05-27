@@ -17,6 +17,7 @@ GFG_API_TIMEOUT_SECONDS = 6
 GFG_PAGE_TIMEOUT_SECONDS = 8
 ATCODER_REQUEST_TIMEOUT_SECONDS = 8
 CODING_NINJAS_REQUEST_TIMEOUT_SECONDS = 8
+CODEWARS_REQUEST_TIMEOUT_SECONDS = 8
 
 _session_local = threading.local()
 
@@ -413,4 +414,24 @@ def fetch_coding_ninjas(username):
         return {"total": 0}
     except Exception as exc:
         print("Coding Ninjas Error", exc)
+        return {}
+
+
+def fetch_codewars(username):
+    """Fetch Codewars completed kata count, honor, and rank from public API."""
+    try:
+        response = _get_http_session().get(
+            f"https://www.codewars.com/api/v1/users/{username}",
+            timeout=CODEWARS_REQUEST_TIMEOUT_SECONDS,
+        )
+        if response.status_code == 200:
+            data = response.json()
+            total = data.get("codeChallenges", {}).get("totalCompleted", 0)
+            honor = data.get("honor", 0)
+            rank_info = data.get("ranks", {}).get("overall", {})
+            rank_name = rank_info.get("name", "")
+            return {"total": int(total or 0), "honor": int(honor or 0), "rank": rank_name}
+        return {}
+    except Exception as exc:
+        print("Codewars Error", exc)
         return {}
