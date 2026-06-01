@@ -3,6 +3,7 @@ import json
 from app.leaderboard.cache import invalidate_leaderboard_cache
 from app.platforms.fetchers import (
     fetch_atcoder,
+    fetch_codechef,
     fetch_coding_ninjas,
     fetch_gfg,
     fetch_github,
@@ -13,7 +14,6 @@ from app.platforms.fetchers import (
     run_fetch_jobs,
 )
 from app.utils import ensure_utc_datetime, normalize_coding_ninjas_profile_id, utc_now
-
 
 SYNC_COOLDOWN_SECONDS = 600
 
@@ -46,6 +46,7 @@ def build_platform_sync_jobs(
     codingninjas_username="",
     hackerrank_username="",
     atcoder_username="",
+    codechef_username="",
 ):
     jobs = {}
 
@@ -81,6 +82,9 @@ def build_platform_sync_jobs(
 
     if atcoder_username:
         jobs["atcoder"] = lambda: fetch_atcoder(atcoder_username)
+    
+    if codechef_username:
+        jobs["codechef"] = lambda: fetch_codechef(codechef_username)
 
     return jobs
 
@@ -110,6 +114,7 @@ def sync_user_platforms(user, data, db_handle, cache_backend, now=None):
     hackerrank_username = user.hackerrank_username or ""
     codingninjas_username = user.codingninjas_username or ""
     atcoder_username = user.atcoder_username or ""
+    codechef_username = user.codechef_username or ""
 
     if "leetcode" in data:
         leetcode_username = data.get("leetcode", "").strip()
@@ -129,6 +134,9 @@ def sync_user_platforms(user, data, db_handle, cache_backend, now=None):
     if "atcoder" in data:
         atcoder_username = data.get("atcoder", "").strip()
         update_fields["atcoder_username"] = atcoder_username
+    if "codechef" in data:
+        codechef_username = data.get("codechef", "").strip()
+        update_fields["codechef_username"] = codechef_username
 
     combined_daily_counts = {}
     platform_totals = {}
@@ -147,6 +155,7 @@ def sync_user_platforms(user, data, db_handle, cache_backend, now=None):
         codingninjas_username=codingninjas_username,
         hackerrank_username=hackerrank_username,
         atcoder_username=atcoder_username,
+        codechef_username=codechef_username,
     )
     platform_results, platform_errors = run_fetch_jobs(platform_jobs, max_workers=4)
 
@@ -256,7 +265,25 @@ def sync_user_platforms(user, data, db_handle, cache_backend, now=None):
                 platform_totals["AtCoder"] = int(atcoder_data.get("total", 0))
     else:
         _mark("atcoder", "skipped")
-
+    if codechef_username:
+        codechef_data = platform_results.get("codechef")
+        if platform_errors.get("codechef"):
+            _mark("codechef", "failed", "Failed to fetch CodeChef stats.")
+        elif not codechef_data:
+            _mark("codechef", "failed", "No data returned (username may be invalid or rate-limited).")
+        else:
+            _mark("codechef", "synced")
+            if codechef_data.get("total") is not None:
+                platform_totals["CodeChef"] = int(codechef_data.get("total", 0))
+            if codechef_data.get("rating") is not None:
+                platform_totals["CodeChef_Rating"] = codechef_data.get("rating")
+            if codechef_data.get("highest_rating") is not None:
+                platform_totals["CodeChef_HighestRating"] = codechef_data.get("highest_rating")
+            if codechef_data.get("contests") is not None:
+                platform_totals["CodeChef_Contests"] = codechef_data.get("contests")
+    else:
+        _mark("codechef", "skipped")
+    
     update_fields["external_daily_counts"] = combined_daily_counts
     update_fields["external_totals"] = platform_totals
     db_handle.user.update_one({"_id": user_id}, {"$set": update_fields})

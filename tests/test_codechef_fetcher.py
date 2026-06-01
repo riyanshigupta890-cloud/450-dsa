@@ -63,3 +63,31 @@ def test_fetch_codechef_handles_missing_fields_gracefully():
     assert result['rating'] is None
     assert result['highest_rating'] is None
     assert result['contests'] == 0
+from app.profile.sync_service import build_platform_sync_jobs
+
+
+def test_sync_jobs_includes_codechef_when_username_provided():
+    """Sync path includes codechef job when username is given."""
+    jobs = build_platform_sync_jobs(codechef_username="tourist")
+    assert "codechef" in jobs
+
+
+def test_sync_jobs_excludes_codechef_when_username_empty():
+    """Sync path skips codechef job when no username given."""
+    jobs = build_platform_sync_jobs()
+    assert "codechef" not in jobs
+
+
+def test_sync_jobs_codechef_calls_fetcher():
+    """Sync job actually calls fetch_codechef with correct username."""
+    with patch("app.platforms.fetchers.fetch_codechef") as mock_fetch:
+        mock_fetch.return_value = {
+            "total": 50,
+            "rating": 1800,
+            "highest_rating": 1900,
+            "contests": 10
+        }
+        jobs = build_platform_sync_jobs(codechef_username="tourist")
+        result = jobs["codechef"]()
+        mock_fetch.assert_called_once_with("tourist")
+        assert result["total"] == 50
