@@ -65,9 +65,34 @@
     <a class="card-btn ui-btn ui-btn-secondary ui-btn-block" href="{{ url_for('tracker.export_csv') }}" aria-label="Export progress as CSV file">
       <i class="bi bi-download" style="margin-right:6px" aria-hidden="true"></i> Export Progress CSV
     </a>
+    <a class="card-btn ui-btn ui-btn-secondary ui-btn-block" href="{{ url_for('tracker.export_json') }}" aria-label="Export progress as JSON file">
+      <i class="bi bi-download" style="margin-right:6px" aria-hidden="true"></i> Export Progress JSON
+    </a>
+    <button class="card-btn ui-btn ui-btn-secondary ui-btn-block" onclick="openImportModal()" aria-label="Import progress from backup file">
+      <i class="bi bi-upload" style="margin-right:6px" aria-hidden="true"></i> Import Progress (CSV/JSON)
+    </button>
     <a class="card-btn ui-btn ui-btn-secondary ui-btn-block" href="{{ url_for('tracker.export_study_plan_ics') }}" aria-label="Export study plan calendar file">
       <i class="bi bi-calendar-event" style="margin-right:6px" aria-hidden="true"></i> Export Study Calendar
     </a>
+    {% set milestone_certs = [
+      {'id': '100-solved', 'label': '100 Solved', 'eligible': dsa_done >= 100},
+      {'id': '250-solved', 'label': '250 Solved', 'eligible': dsa_done >= 250},
+      {'id': 'sheet-completed', 'label': 'Sheet Completed', 'eligible': dsa_done >= total_questions}
+    ] %}
+    <div style="margin-top:12px">
+      <div class="sec-title">Milestone Certificates</div>
+      {% for cert in milestone_certs %}
+        {% if cert.eligible %}
+          <a class="card-btn ui-btn ui-btn-secondary ui-btn-block" href="{{ url_for('profile.milestone_certificate', milestone_id=cert.id) }}" aria-label="Download {{ cert.label }} certificate">
+            <i class="bi bi-download" style="margin-right:6px" aria-hidden="true"></i> {{ cert.label }} Certificate
+          </a>
+        {% else %}
+          <button class="card-btn ui-btn ui-btn-secondary ui-btn-block" disabled aria-disabled="true">
+            <i class="bi bi-lock" style="margin-right:6px" aria-hidden="true"></i> {{ cert.label }} Certificate
+          </button>
+        {% endif %}
+      {% endfor %}
+    </div>
     <div class="prof-bio">{{ user.bio or 'Software Engineer | Problem Solver | DSA Enthusiast' }}</div>
     <div class="social-row">
       {% if user.email %}<a href="mailto:{{ user.email }}" class="social-icon" title="Email" aria-label="Send email to {{ user.email }}"><i class="bi bi-envelope" aria-hidden="true"></i></a>{% endif %}
@@ -122,6 +147,12 @@
       <span><i class="bi bi-trophy" style="color:#f97316;margin-right:6px" aria-hidden="true"></i>AtCoder</span>
       <span style="display:flex;align-items:center;gap:6px">
         {% if user.atcoder_username %}<i class="bi bi-check-circle-fill check-ok" aria-hidden="true"></i><a href="{{ user.atcoder_username | platform_url('atcoder') }}" target="_blank" rel="noopener noreferrer" class="link-out" aria-label="AtCoder profile (opens in new tab)"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i></a>{% else %}<a href="#" class="link-out" onclick="openSyncModal();return false;" aria-label="Connect AtCoder account"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i></a>{% endif %}
+      </span>
+    </div>
+    <div class="platform-row">
+      <span><i class="bi bi-fire" style="color:#b1361e;margin-right:6px" aria-hidden="true"></i>Codewars</span>
+      <span style="display:flex;align-items:center;gap:6px">
+        {% if user.codewars_username %}<i class="bi bi-check-circle-fill check-ok" aria-hidden="true"></i><a href="{{ user.codewars_username | platform_url('codewars') }}" target="_blank" rel="noopener noreferrer" class="link-out" aria-label="Codewars profile (opens in new tab)"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i></a>{% else %}<a href="#" class="link-out" onclick="openSyncModal();return false;" aria-label="Connect Codewars account"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i></a>{% endif %}
       </span>
     </div>
     <button class="add-btn ui-btn ui-btn-secondary ui-btn-block" onclick="openSyncModal()" aria-label="Add or connect coding platform accounts"><i class="bi bi-plus" aria-hidden="true"></i> Add Platform</button>
@@ -301,7 +332,7 @@
       <div class="donut-inner">{{ global_total_solved }}</div>
     </div>
     <div>
-      {% for name in ['LeetCode', 'GFG', 'Coding Ninjas', 'HackerRank', 'AtCoder'] %}
+      {% for name in ['LeetCode', 'GFG', 'Coding Ninjas', 'HackerRank', 'AtCoder', 'Codewars'] %}
       <div class="legend-item">
         <span><span class="legend-dot" style="background:{{ PLATFORM_META[name].brand_color }}"></span><span style="color:{{ PLATFORM_META[name].brand_color }};font-weight:700">{{ name }}</span></span>
         <strong>{{ platforms[name] }}</strong>
@@ -315,10 +346,10 @@
 
     <hr style="border-color:var(--border-color);margin:16px 0">
 
-    <!-- DSA difficulty -->
+    <!-- LeetCode difficulty -->
     <div style="font-size:.8rem;font-weight:700;display:flex;justify-content:space-between;align-items:center;color:var(--text-secondary);margin-bottom:12px">
-      <span style="flex:1;text-align:center;padding-left:24px">DSA</span>
-      <button onclick="exportChart('difficultyChart', 'dsa-difficulty.png')" title="Export Chart as Image" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:1.1rem;transition:color 0.2s;width:24px" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--text-muted)'" aria-label="Export difficulty chart">
+      <span style="flex:1;text-align:center;padding-left:24px">LeetCode</span>
+      <button onclick="exportChart('difficultyChart', 'leetcode-difficulty.png')" title="Export Chart as Image" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:1.1rem;transition:color 0.2s;width:24px" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--text-muted)'" aria-label="Export difficulty chart">
         <i class="bi bi-download" aria-hidden="true"></i>
       </button>
     </div>
@@ -379,6 +410,8 @@
     <input class="m-inp" id="hr_username" placeholder="e.g. hacker" value="{{ user.hackerrank_username or '' }}">
     <label class="m-lbl"><i class="bi bi-trophy" style="color:#f97316;margin-right:4px"></i>AtCoder Username</label>
     <input class="m-inp" id="ac_username" placeholder="e.g. tourist" value="{{ user.atcoder_username or '' }}">
+    <label class="m-lbl"><i class="bi bi-fire" style="color:#b1361e;margin-right:4px"></i>Codewars Username</label>
+    <input class="m-inp" id="cw_username" placeholder="e.g. g964" value="{{ user.codewars_username or '' }}">
     <div class="m-note">GFG and Coding Ninjas sync are experimental and may take a few seconds.</div>
     <div class="m-actions">
       <button class="m-cancel" onclick="closeSyncModal()">Cancel</button>
@@ -445,6 +478,80 @@
     </div>
 {% endcall %}
 
+<!-- Import Progress Modal -->
+<div class="modal-ov" id="importModal" role="dialog" aria-modal="true" aria-labelledby="importModalTitle">
+  <div class="modal-bx" style="max-width:500px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <h3 id="importModalTitle" style="margin-bottom:0"><i class="bi bi-upload" style="color:var(--accent)"></i> Import Progress</h3>
+      <button type="button" onclick="closeImportModal()" style="background:none;border:none;color:var(--text-muted);font-size:1.2rem;cursor:pointer" aria-label="Close dialog">✕</button>
+    </div>
+    <p style="font-size:.8rem;color:var(--text-secondary);margin-bottom:15px">Upload a previously exported CSV or JSON progress backup file.</p>
+    
+    <div style="margin-bottom:15px">
+      <label class="m-lbl">Choose Backup File (.csv, .json)</label>
+      <input type="file" id="importFile" accept=".csv,.json" class="m-inp" onchange="handleImportFileSelect(event)" style="padding:10px">
+    </div>
+
+    <!-- Preview Container -->
+    <div id="importPreviewContainer" style="display:none;margin-top:15px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:10px;padding:12px;max-height:300px;overflow-y:auto">
+      <h4 style="margin:0 0 8px 0;font-size:0.9rem">Dry-Run Preview Summary</h4>
+      <table style="width:100%;font-size:0.8rem;border-collapse:collapse;margin-bottom:10px">
+        <tr>
+          <td style="padding:4px 0;color:var(--text-secondary)">Total Parsed:</td>
+          <td><strong id="previewTotal" style="float:right">0</strong></td>
+        </tr>
+        <tr>
+          <td style="padding:4px 0;color:var(--text-secondary)">Matched:</td>
+          <td><strong id="previewMatched" style="float:right">0</strong></td>
+        </tr>
+        <tr>
+          <td style="padding:4px 0;color:var(--text-secondary)">Unmatched (Skipped):</td>
+          <td><strong id="previewUnmatched" style="float:right">0</strong></td>
+        </tr>
+        <tr>
+          <td style="padding:4px 0;color:var(--text-secondary)">Changes Detected:</td>
+          <td><strong id="previewChanges" style="float:right;color:var(--accent)">0</strong></td>
+        </tr>
+        <tr>
+          <td style="padding:4px 0;color:var(--text-secondary)">Conflicts (e.g. notes):</td>
+          <td><strong id="previewConflicts" style="float:right;color:var(--warning)">0</strong></td>
+        </tr>
+      </table>
+
+      <!-- Option for Import Mode -->
+      <div style="margin:15px 0 10px 0;border-top:1px solid var(--border-color);padding-top:10px">
+        <label class="m-lbl" style="margin-bottom:5px">Import Mode</label>
+        <div style="display:flex;gap:15px;align-items:center">
+          <label style="font-size:0.8rem;cursor:pointer;display:flex;align-items:center;gap:4px">
+            <input type="radio" name="importMode" value="merge" checked> Merge (Safe append)
+          </label>
+          <label style="font-size:0.8rem;cursor:pointer;display:flex;align-items:center;gap:4px">
+            <input type="radio" name="importMode" value="replace"> Replace (Overwrite)
+          </label>
+        </div>
+        <div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px" id="importModeHelp">
+          Merge will add new progress and combine note differences. Replace will overwrite only the questions found in your import file (unmatched existing progress is preserved).
+        </div>
+      </div>
+      
+      <!-- Change items preview list -->
+      <div id="previewItemsList" style="margin-top:10px;font-size:0.75rem;border-top:1px solid var(--border-color);padding-top:10px">
+        <div style="font-weight:700;margin-bottom:5px">Change Log (First 50 items):</div>
+        <ul id="previewList" style="padding-left:15px;margin:0;max-height:100px;overflow-y:auto;color:var(--text-secondary)"></ul>
+      </div>
+    </div>
+
+    <div class="m-actions" style="margin-top:20px">
+      <button class="m-cancel" onclick="closeImportModal()">Cancel</button>
+      <button class="m-save" id="btnConfirmImport" onclick="handleConfirmImport(this)" disabled style="opacity:0.6;cursor:not-allowed">
+        <span id="confirmImportBtnContent" style="display:inline-flex;align-items:center;gap:6px">
+          <i class="bi bi-check2-circle"></i> Confirm Import
+        </span>
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- Sync Loading Overlay -->
 <div id="syncOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:10000;flex-direction:column;align-items:center;justify-content:center;gap:20px">
   <div style="width:60px;height:60px;border:4px solid rgba(255,107,0,.3);border-top-color:var(--accent);border-radius:50%;animation:spin .9s linear infinite"></div>
@@ -462,6 +569,8 @@ const endpointConfig = {{ {
   "uploadPhoto": url_for('profile.upload_photo'),
   "searchUniversities": url_for('profile.search_universities'),
   "publicCardPath": url_for('profile.public_card', user_id=user.id),
+  "importPreview": url_for('tracker.import_preview'),
+  "importCommit": url_for('tracker.import_commit'),
 }|tojson }};
 const csrfToken = {{ csrf_token()|tojson }};
 
@@ -501,14 +610,15 @@ window.handleQuickSync = function(btn) {
   const icon = document.getElementById('quickSyncIcon');
   if (btn.disabled) return;
   
-  const lc = '{{ user.leetcode_username or "" }}';
-  const gh = '{{ user.github_username or "" }}';
-  const gfg = '{{ user.gfg_username or "" }}';
-  const hr = '{{ user.hackerrank_username or "" }}';
-  const cn = '{{ user.codingninjas_username or "" }}';
-  const ac = '{{ user.atcoder_username or "" }}';
+  const lc = {{ (user.leetcode_username or "")|tojson }};
+  const gh = {{ (user.github_username or "")|tojson }};
+  const gfg = {{ (user.gfg_username or "")|tojson }};
+  const hr = {{ (user.hackerrank_username or "")|tojson }};
+  const cn = {{ (user.codingninjas_username or "")|tojson }};
+  const ac = {{ (user.atcoder_username or "")|tojson }};
+  const cw = {{ (user.codewars_username or "")|tojson }};
   
-  if(!lc && !gh && !gfg && !hr && !cn && !ac){
+  if(!lc && !gh && !gfg && !hr && !cn && !ac && !cw){
     showToast('⚠️ No platforms connected to sync!');
     return;
   }
@@ -520,7 +630,7 @@ window.handleQuickSync = function(btn) {
   fetch(endpointConfig.syncPlatforms, {
     method:'POST',
     headers:{'Content-Type':'application/json','X-CSRFToken':csrfToken},
-    body:JSON.stringify({leetcode:lc,github:gh,gfg:gfg,hackerrank:hr,codingninjas:cn,atcoder:ac})
+    body:JSON.stringify({leetcode:lc,github:gh,gfg:gfg,hackerrank:hr,codingninjas:cn,atcoder:ac,codewars:cw})
   })
   .then(r => r.json())
   .then(res => {
@@ -548,7 +658,8 @@ window.handleSyncProfile = function(btn){
   const hr=document.getElementById('hr_username').value.trim();
   const cn=document.getElementById('cn_username').value.trim();
   const ac=document.getElementById('ac_username').value.trim();
-  if(!lc && !gh && !gfg && !hr && !cn && !ac){showToast('\u26a0\ufe0f Enter at least one username');return;}
+  const cw=document.getElementById('cw_username').value.trim();
+  if(!lc && !gh && !gfg && !hr && !cn && !ac && !cw){showToast('\u26a0\ufe0f Enter at least one username');return;}
 
   // Disable button & show spinner
   window.setButtonBusyState(btn, syncContent, { busy: true, busyLabel: 'Syncing...' });
@@ -565,7 +676,8 @@ window.handleSyncProfile = function(btn){
     {id:'ss_gfg', label:'GFG', value:gfg},
     {id:'ss_hr', label:'HackerRank', value:hr},
     {id:'ss_cn', label:'Coding Ninjas', value:cn},
-    {id:'ss_ac', label:'AtCoder', value:ac}
+    {id:'ss_ac', label:'AtCoder', value:ac},
+    {id:'ss_cw', label:'Codewars', value:cw}
   ];
   const activeSyncPlatforms=syncPlatforms.filter(platform=>platform.value);
   const stepsContainer=document.getElementById('syncSteps');
@@ -593,7 +705,7 @@ window.handleSyncProfile = function(btn){
   fetch(endpointConfig.syncPlatforms,{
     method:'POST',
     headers:{'Content-Type':'application/json','X-CSRFToken':csrfToken},
-    body:JSON.stringify({leetcode:lc,github:gh,gfg:gfg,hackerrank:hr,codingninjas:cn,atcoder:ac}),
+    body:JSON.stringify({leetcode:lc,github:gh,gfg:gfg,hackerrank:hr,codingninjas:cn,atcoder:ac,codewars:cw}),
     signal:ctrl.signal
   })
   .then(r=>{clearTimeout(timer);return r.json();})
@@ -758,4 +870,29 @@ function handlePhotoUpload(e){
   });
 })();
 </script>
+<script src="{{ url_for('static', filename='js/profile-import.js') }}"></script>
+<style>
+  @media screen and (max-width:768px)
+  {
+    .prof-layout
+    {
+      display:flex;
+      flex-direction:column;
+      gap:20px;
+      padding:10px;
+    }
+    .card
+    {
+      width:100%;
+      border-radius:12px;
+      margin-bottom: 15px;
+    }
+    img
+    {
+      max-width: 100%;
+      height: auto;
+    }
+  }
+</style>
+
 {% endblock %}

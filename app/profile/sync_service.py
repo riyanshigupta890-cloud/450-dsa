@@ -1,10 +1,12 @@
 import json
+import logging
 
 from app.leaderboard.cache import invalidate_leaderboard_cache
 from app.platforms.fetchers import (
     fetch_atcoder,
     fetch_codechef,
     fetch_coding_ninjas,
+    fetch_codewars,
     fetch_gfg,
     fetch_github,
     fetch_hr_badges,
@@ -14,8 +16,25 @@ from app.platforms.fetchers import (
     run_fetch_jobs,
 )
 from app.utils import ensure_utc_datetime, normalize_coding_ninjas_profile_id, utc_now
+from profile_validation import validate_username
+
+logger = logging.getLogger("flask.app")
 
 SYNC_COOLDOWN_SECONDS = 600
+
+PLATFORM_KEYS = {"leetcode", "github", "gfg", "hackerrank",
+                 "codingninjas", "atcoder", "codewars"}
+
+PLATFORM_TOTAL_KEYS = {
+    "leetcode": {"LeetCode", "LeetCode_Easy", "LeetCode_Medium", "LeetCode_Hard",
+                 "LeetCode_Contests", "LeetCode_Rating", "LeetCode_GlobalRank"},
+    "github": {"GitHub_Issues", "GitHub_PRs", "GitHub_Merged_PRs", "GitHub_Commits"},
+    "gfg": {"GFG"},
+    "codingninjas": {"Coding Ninjas"},
+    "hackerrank": {"HackerRank"},
+    "atcoder": {"AtCoder"},
+    "codewars": {"Codewars"},
+}
 
 
 def build_sync_platforms_response(platform_status: dict):
@@ -33,10 +52,8 @@ def build_sync_platforms_response(platform_status: dict):
 
 
 def clear_profile_caches(cache_backend, user_id):
-    try:
-        cache_backend.delete(f"card_{str(user_id)}")
-    except KeyError:
-        pass
+    from app.profile.card_service import delete_card_cache
+    delete_card_cache(str(user_id))
 
 
 def build_platform_sync_jobs(
@@ -58,12 +75,12 @@ def build_platform_sync_jobs(
                 rating_history = fetch_leetcode_rating_history(leetcode_username)
                 if rating_history:
                     result["rating_history"] = rating_history
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning(f"LeetCode rating history sync failed: {exc}")
             try:
                 result["badges"] = fetch_lc_badges(leetcode_username)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning(f"LeetCode badges sync failed: {exc}")
             return result
 
         jobs["leetcode"] = fetch_leetcode_bundle
@@ -148,6 +165,12 @@ def sync_user_platforms(user, data, db_handle, cache_backend, now=None):
             payload["error"] = error
         platform_status[platform_key] = payload
 
+    # Preserve existing per-platform calendar data across partial syncs
+    existing_calendars = getattr(user, "platform_calendars", {})
+    if not isinstance(existing_calendars, dict):
+        existing_calendars = {}
+    platform_calendars = dict(existing_calendars)
+
     platform_jobs = build_platform_sync_jobs(
         leetcode_username=leetcode_username,
         github_username=github_username,
@@ -168,8 +191,7 @@ def sync_user_platforms(user, data, db_handle, cache_backend, now=None):
             _mark("leetcode", "failed", "No data returned (username may be invalid or rate-limited).")
         else:
             _mark("leetcode", "synced")
-            for key, value in leetcode_data.get("calendar", {}).items():
-                combined_daily_counts[key] = combined_daily_counts.get(key, 0) + value
+            platform_calendars["leetcode"] = leetcode_data.get("calendar", {})
             if leetcode_data.get("total") is not None:
                 platform_totals["LeetCode"] = leetcode_data.get("total")
             if leetcode_data.get("difficulty"):
@@ -202,8 +224,7 @@ def sync_user_platforms(user, data, db_handle, cache_backend, now=None):
                 _mark("github", "failed", "GitHub API returned an error. Please try again later.")
         else:
             _mark("github", "synced")
-            for key, value in github_data.get("calendar", {}).items():
-                combined_daily_counts[key] = combined_daily_counts.get(key, 0) + value
+            platform_calendars["github"] = github_data.get("calendar", {})
             if github_data.get("stats"):
                 platform_totals["GitHub_Issues"] = github_data["stats"]["issues"]
                 platform_totals["GitHub_PRs"] = github_data["stats"]["prs"]
@@ -219,9 +240,12 @@ def sync_user_platforms(user, data, db_handle, cache_backend, now=None):
         elif not gfg_data:
             _mark("gfg", "failed", "No data returned (username may be invalid or rate-limited).")
         else:
-            _mark("gfg", "synced")
-            if gfg_data.get("total") is not None:
-                platform_totals["GFG"] = int(gfg_data.get("total", 0))
+            gfg_total = gfg_data.get("total")
+            if gfg_total is not None and int(gfg_total) > 0:
+                platform_totals["GFG"] = int(gfg_total)
+                _mark("gfg", "synced")
+            else:
+                _mark("gfg", "failed", "No solved problems found (username may be invalid).")
     else:
         _mark("gfg", "skipped")
 
@@ -232,9 +256,12 @@ def sync_user_platforms(user, data, db_handle, cache_backend, now=None):
         elif not codingninjas_data:
             _mark("codingninjas", "failed", "No data returned (username may be invalid or rate-limited).")
         else:
-            _mark("codingninjas", "synced")
-            if codingninjas_data.get("total") is not None:
-                platform_totals["Coding Ninjas"] = int(codingninjas_data.get("total", 0))
+            cn_total = codingninjas_data.get("total")
+            if cn_total is not None and int(cn_total) > 0:
+                platform_totals["Coding Ninjas"] = int(cn_total)
+                _mark("codingninjas", "synced")
+            else:
+                _mark("codingninjas", "failed", "No solved problems found (username may be invalid).")
     else:
         _mark("codingninjas", "skipped")
 
@@ -249,7 +276,9 @@ def sync_user_platforms(user, data, db_handle, cache_backend, now=None):
             update_fields["hr_badges_json"] = json.dumps(hr_badges)
             if hr_solved > 0:
                 platform_totals["HackerRank"] = hr_solved
-            _mark("hackerrank", "synced")
+                _mark("hackerrank", "synced")
+            else:
+                _mark("hackerrank", "failed", "No solved problems found (username may be invalid).")
     else:
         _mark("hackerrank", "skipped")
 
@@ -260,9 +289,12 @@ def sync_user_platforms(user, data, db_handle, cache_backend, now=None):
         elif not atcoder_data:
             _mark("atcoder", "failed", "No data returned (handle may be invalid or rate-limited).")
         else:
-            _mark("atcoder", "synced")
-            if atcoder_data.get("total") is not None:
-                platform_totals["AtCoder"] = int(atcoder_data.get("total", 0))
+            atcoder_total = atcoder_data.get("total")
+            if atcoder_total is not None and int(atcoder_total) > 0:
+                platform_totals["AtCoder"] = int(atcoder_total)
+                _mark("atcoder", "synced")
+            else:
+                _mark("atcoder", "failed", "No solved problems found (handle may be invalid).")
     else:
         _mark("atcoder", "skipped")
     if codechef_username:
@@ -284,7 +316,47 @@ def sync_user_platforms(user, data, db_handle, cache_backend, now=None):
     else:
         _mark("codechef", "skipped")
 
-    update_fields["external_daily_counts"] = combined_daily_counts
+    if codewars_username:
+        codewars_data = platform_results.get("codewars")
+        if platform_errors.get("codewars"):
+            _mark("codewars", "failed", "Failed to fetch Codewars stats.")
+        elif not codewars_data:
+            _mark("codewars", "failed", "No data returned (username may be invalid or rate-limited).")
+        else:
+            cw_total = codewars_data.get("total")
+            if cw_total is not None and int(cw_total) > 0:
+                platform_totals["Codewars"] = int(cw_total)
+                _mark("codewars", "synced")
+            else:
+                _mark("codewars", "failed", "No solved problems found (username may be invalid).")
+    else:
+        _mark("codewars", "skipped")
+
+    # Backfill or remove ``_legacy`` depending on whether the current sync
+    # covered every platform the user has configured.  During the migration
+    # from the old flat ``external_daily_counts`` format to per-platform
+    # calendars, ``_legacy`` preserves dates from platforms not yet re-synced.
+    requested_platforms = {k for k in data if k in PLATFORM_KEYS}
+    legacy_counts = getattr(user, "external_daily_counts", {})
+    has_legacy = isinstance(legacy_counts, dict) and bool(legacy_counts)
+
+    if has_legacy:
+        user_platforms = set()
+        for attr in ("leetcode_username", "github_username", "gfg_username",
+                     "hackerrank_username", "codingninjas_username",
+                     "atcoder_username", "codewars_username"):
+            if getattr(user, attr, ""):
+                platform_name = attr.replace("_username", "")
+                user_platforms.add(platform_name)
+
+        if user_platforms and requested_platforms and user_platforms.issubset(requested_platforms):
+            # All user platforms were included in this sync → migration done
+            platform_calendars.pop("_legacy", None)
+        else:
+            # Partial sync — preserve legacy data for platforms not yet re-synced
+            platform_calendars["_legacy"] = dict(legacy_counts)
+
+    update_fields["platform_calendars"] = platform_calendars
     update_fields["external_totals"] = platform_totals
     db_handle.user.update_one({"_id": user_id}, {"$set": update_fields})
     user.reload()

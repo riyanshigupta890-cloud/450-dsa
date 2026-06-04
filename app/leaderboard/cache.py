@@ -1,4 +1,5 @@
 from flask import request
+from flask_login import current_user
 
 from app.extensions import cache
 
@@ -22,9 +23,14 @@ def invalidate_leaderboard_cache():
 
 
 def leaderboard_page_cache_key():
-    return f"leaderboard:v{_leaderboard_cache_version()}:page:{request.path}"
+    user_key = f"user:{current_user.get_id()}" if current_user.is_authenticated else "anon"
+    return f"leaderboard:v{_leaderboard_cache_version()}:page:{request.path}:{user_key}"
 
 
 def api_leaderboard_cache_key():
     args = tuple(sorted(request.args.items(multi=True)))
     return f"leaderboard:v{_leaderboard_cache_version()}:api:{request.path}:{args}"
+
+
+# GSSoC Leaderboard cache TTL window
+# Cache leaderboard statistics for 5 minutes max to save Redis compute.

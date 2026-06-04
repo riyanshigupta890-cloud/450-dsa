@@ -24,6 +24,7 @@ from app.security import (
 )
 from app.search import search_bp
 from app.tracker import tracker_bp
+from app.cohort.routes import cohort_bp
 from app.utils import (
     platform_color_filter,
     platform_name_filter,
@@ -58,6 +59,32 @@ def _mongo_client_options(app):
         "maxPoolSize": app.config["MONGO_MAX_POOL_SIZE"],
         "minPoolSize": app.config["MONGO_MIN_POOL_SIZE"],
     }
+
+
+def _dedupe_seeded_questions():
+    if not all(hasattr(db.question, attr) for attr in ("aggregate", "delete_many")):
+        return
+
+    duplicate_groups = db.question.aggregate(
+        [
+            {
+                "$group": {
+                    "_id": {
+                        "topic": "$topic",
+                        "problem": "$problem",
+                        "url": "$url",
+                    },
+                    "ids": {"$push": "$_id"},
+                    "count": {"$sum": 1},
+                }
+            },
+            {"$match": {"count": {"$gt": 1}}},
+        ]
+    )
+    for group in duplicate_groups:
+        duplicate_ids = group["ids"][1:]
+        if duplicate_ids:
+            db.question.delete_many({"_id": {"$in": duplicate_ids}})
 
 
 def create_app(config_class=None):
@@ -106,8 +133,8 @@ def create_app(config_class=None):
 
     oauth.register(
         name="github",
-        client_id=os.environ.get("GITHUB_CLIENT_ID", "your-github-client-id"),
-        client_secret=os.environ.get("GITHUB_CLIENT_SECRET", "your-github-client-secret"),
+        client_id=os.environ.get("GITHUB_CLIENT_ID"),
+        client_secret=os.environ.get("GITHUB_CLIENT_SECRET"),
         access_token_url="https://github.com/login/oauth/access_token",
         access_token_params=None,
         authorize_url="https://github.com/login/oauth/authorize",
@@ -118,8 +145,8 @@ def create_app(config_class=None):
 
     oauth.register(
         name="google",
-        client_id=os.environ.get("GOOGLE_CLIENT_ID", "your-google-client-id"),
-        client_secret=os.environ.get("GOOGLE_CLIENT_SECRET", "your-google-client-secret"),
+        client_id=os.environ.get("GOOGLE_CLIENT_ID"),
+        client_secret=os.environ.get("GOOGLE_CLIENT_SECRET"),
         server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
         client_kwargs={"scope": "openid email profile"},
     )
@@ -132,27 +159,32 @@ def create_app(config_class=None):
         db.topic.create_index("name", unique=True)
         db.topic.create_index("position")
         db.question.create_index("topic")
+        _dedupe_seeded_questions()
+        db.question.create_index([("topic", 1), ("problem", 1), ("url", 1)], unique=True)
         db.question.create_index([("problem", "text")], name="problem_text")
+        db.cohort.create_index("join_code", unique=True)
+        db.cohort_membership.create_index([("cohort_id", 1), ("user_id", 1)], unique=True)
+        db.cohort_membership.create_index("user_id")
         
         # Lightweight schema backfill for legacy user documents.
         db.user.update_many({"is_admin": {"$exists": False}}, {"$set": {"is_admin": False}})
-    except Exception:
-        pass
+    except Exception as exc:
+        app.logger.warning(f"Database indexing or schema backfill failed: {exc}")
     data_path = Path(app.root_path).parent / "data.json"
     app._db_initialized = False
 
     def init_db():
-        if db.topic.count_documents({}) == 0:
-            with data_path.open("r", encoding="utf-8") as file_obj:
-                data = json.load(file_obj)
-            for topic in data:
-                result = db.topic.insert_one({"name": topic["topicName"], "position": topic["position"]})
-                topic_id = result.inserted_id
-                questions = []
-                for question in topic["questions"]:
-                    difficulty = question.get("difficulty", "Medium")
-                    questions.append(
-                        {
+        with data_path.open("r", encoding="utf-8") as file_obj:
+            data = json.load(file_obj)
+        if not all(hasattr(collection, "update_one") for collection in (db.topic, db.question)):
+            if db.topic.count_documents({}) == 0:
+                for topic in data:
+                    result = db.topic.insert_one({"name": topic["topicName"], "position": topic["position"]})
+                    topic_id = result.inserted_id
+                    questions = []
+                    for question in topic["questions"]:
+                        difficulty = question.get("difficulty", "Medium")
+                        q_data = {
                             "topic": topic_id,
                             "problem": question["Problem"],
                             "url": question["URL"],
@@ -160,9 +192,90 @@ def create_app(config_class=None):
                             "editorial_links": question_editorial_links(question),
                             "difficulty": difficulty,
                         }
-                    )
-                if questions:
-                    db.question.insert_many(questions)
+                        if "hints" in question:
+                            q_data["hints"] = question["hints"]
+                        questions.append(q_data)
+                    if questions:
+                        db.question.insert_many(questions)
+            return
+
+        for topic in data:
+            db.topic.update_one(
+                {"name": topic["topicName"]},
+                {"$set": {"position": topic["position"]}},
+                upsert=True,
+            )
+            topic_doc = db.topic.find_one({"name": topic["topicName"]})
+            if not topic_doc:
+                continue
+
+            topic_id = topic_doc["_id"]
+            for question in topic["questions"]:
+                difficulty = question.get("difficulty", "Medium")
+                set_fields = {
+                    "url2": question.get("URL2", ""),
+                    "editorial_links": question_editorial_links(question),
+                    "difficulty": difficulty,
+                }
+                if "hints" in question:
+                    set_fields["hints"] = question["hints"]
+                db.question.update_one(
+                    {
+                        "topic": topic_id,
+                        "problem": question["Problem"],
+                        "url": question["URL"],
+                    },
+                    {
+                        "$set": set_fields
+                    },
+                    upsert=True,
+                )
+
+    def _precompute_static_data(app):
+        """Precompute static question/topic metadata and store in app config."""
+        try:
+            questions = list(db.question.find())
+            topics = list(db.topic.find().sort("position", 1))
+        except Exception:
+            return
+
+        topic_question_count = {}
+        difficulty_map = {}
+        all_questions_pc = []
+        topic_lookup = {}
+
+        for t in topics:
+            tid = str(t["_id"])
+            topic_lookup[tid] = {"name": t["name"], "position": t["position"]}
+
+        for q in questions:
+            qid = str(q["_id"])
+            tid = str(q["topic"])
+            topic_question_count.setdefault(tid, []).append(qid)
+            difficulty_map[qid] = q.get("difficulty", "Medium")
+            all_questions_pc.append({
+                "_id": qid,
+                "topic": tid,
+                "problem": q.get("problem", ""),
+                "url": q.get("url", ""),
+                "url2": q.get("url2", ""),
+                "difficulty": q.get("difficulty", "Medium"),
+                "editorial_links": q.get("editorial_links", []),
+            })
+
+        topics_pc = [
+            {"_id": str(t["_id"]), "name": t["name"], "position": t["position"]}
+            for t in topics
+        ]
+
+        app.config["_PRECOMPUTED"] = {
+            "all_questions": all_questions_pc,
+            "topics": topics_pc,
+            "topic_lookup": topic_lookup,
+            "topic_question_count": topic_question_count,
+            "difficulty_map": difficulty_map,
+            "total_questions": len(questions),
+        }
 
     @app.before_request
     def ensure_db_initialized():
@@ -171,6 +284,7 @@ def create_app(config_class=None):
 
         if not app._db_initialized:
             init_db()
+            _precompute_static_data(app)
             app._db_initialized = True
 
     from app.platforms.metadata import PLATFORM_META
@@ -234,10 +348,14 @@ def create_app(config_class=None):
     app.register_blueprint(search_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(public_bp)
+    app.register_blueprint(cohort_bp)
 
     @app.errorhandler(429)
     def ratelimit_handler(e):
-        retry_after = getattr(e, 'retry_after', 60)
+        retry_after = getattr(e, 'retry_after', None)
+        if retry_after in (None, "", "None"):
+            retry_after = 60
+        from flask import jsonify
         response = jsonify({
             'error': 'Too many requests',
             'message': str(e.description),
@@ -270,3 +388,7 @@ def create_app(config_class=None):
 
 
     return app
+
+
+# GSSoC Flask Global Error Handler registration
+# Catch 404, 500, and rate-limit HTTP exceptions cleanly.
