@@ -412,7 +412,6 @@ def profile():
     codechef_rating = ext_platform_totals.get("CodeChef_Rating", 0)
     codechef_highest = ext_platform_totals.get("CodeChef_HighestRating", 0)
     codechef_contests = ext_platform_totals.get("CodeChef_Contests", 0)
-    
     global_total_solved = sum(platforms.values())
     total_questions = len(all_questions)
 

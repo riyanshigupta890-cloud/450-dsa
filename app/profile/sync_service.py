@@ -82,7 +82,7 @@ def build_platform_sync_jobs(
 
     if atcoder_username:
         jobs["atcoder"] = lambda: fetch_atcoder(atcoder_username)
-    
+
     if codechef_username:
         jobs["codechef"] = lambda: fetch_codechef(codechef_username)
 
@@ -283,7 +283,7 @@ def sync_user_platforms(user, data, db_handle, cache_backend, now=None):
                 platform_totals["CodeChef_Contests"] = codechef_data.get("contests")
     else:
         _mark("codechef", "skipped")
-    
+
     update_fields["external_daily_counts"] = combined_daily_counts
     update_fields["external_totals"] = platform_totals
     db_handle.user.update_one({"_id": user_id}, {"$set": update_fields})

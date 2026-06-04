@@ -80,7 +80,7 @@ def test_sync_jobs_excludes_codechef_when_username_empty():
 
 def test_sync_jobs_codechef_calls_fetcher():
     """Sync job actually calls fetch_codechef with correct username."""
-    with patch("app.platforms.fetchers.fetch_codechef") as mock_fetch:
+    with patch("app.profile.sync_service.fetch_codechef") as mock_fetch:        
         mock_fetch.return_value = {
             "total": 50,
             "rating": 1800,
