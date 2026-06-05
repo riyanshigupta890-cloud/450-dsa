@@ -1,5 +1,7 @@
 from unittest.mock import MagicMock, patch
+
 from app.platforms.fetchers import clear_platform_http_session, fetch_codechef
+from app.profile.sync_service import build_platform_sync_jobs
 
 
 def setup_function():
@@ -63,7 +65,6 @@ def test_fetch_codechef_handles_missing_fields_gracefully():
     assert result['rating'] is None
     assert result['highest_rating'] is None
     assert result['contests'] == 0
-from app.profile.sync_service import build_platform_sync_jobs
 
 
 def test_sync_jobs_includes_codechef_when_username_provided():
@@ -80,7 +81,7 @@ def test_sync_jobs_excludes_codechef_when_username_empty():
 
 def test_sync_jobs_codechef_calls_fetcher():
     """Sync job actually calls fetch_codechef with correct username."""
-    with patch("app.profile.sync_service.fetch_codechef") as mock_fetch:        
+    with patch("app.profile.sync_service.fetch_codechef") as mock_fetch:
         mock_fetch.return_value = {
             "total": 50,
             "rating": 1800,
