@@ -1,6 +1,6 @@
 import re
 from math import isfinite
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from flask import jsonify
 
@@ -11,6 +11,24 @@ from app.search import service as search_service
 
 def utc_now():
     return datetime.now(timezone.utc)
+
+
+def normalize_timestamp(timestamp):
+    """Convert a progress timestamp to a date string (YYYY-MM-DD).
+
+    Accepts datetime, date, or ISO-format string.  Returns None for
+    unparseable or missing values so callers can skip the entry safely.
+    """
+    if isinstance(timestamp, datetime):
+        return timestamp.strftime("%Y-%m-%d")
+    if isinstance(timestamp, date):
+        return timestamp.isoformat()
+    if isinstance(timestamp, str):
+        try:
+            return date.fromisoformat(timestamp[:10]).isoformat()
+        except (ValueError, TypeError):
+            return None
+    return None
 
 
 def json_response(payload=None, status_code=200, **fields):
@@ -86,6 +104,8 @@ def platform_profile_url(username, platform):
         return f"https://github.com/{username}"
     if platform == "atcoder":
         return f"https://atcoder.jp/users/{username}"
+    if platform == "codewars":
+        return f"https://www.codewars.com/users/{username}"
     return "#"
 
 
@@ -131,8 +151,8 @@ def search_dsa_questions(raw_query, limit=40):
     return search_service.search_dsa_questions(raw_query, limit=limit, db_handle=db)
 
 
-EXTERNAL_SOLVED_TOTAL_KEYS = ("LeetCode", "GFG", "Coding Ninjas", "HackerRank", "AtCoder")
-PLATFORM_COUNT_KEYS = ("LeetCode", "GFG", "Coding Ninjas", "HackerRank", "AtCoder", "Other")
+EXTERNAL_SOLVED_TOTAL_KEYS = ("LeetCode", "GFG", "Coding Ninjas", "HackerRank", "AtCoder", "Codewars")
+PLATFORM_COUNT_KEYS = ("LeetCode", "GFG", "Coding Ninjas", "HackerRank", "AtCoder", "Codewars", "Other")
 
 
 def empty_platform_counts():
@@ -205,6 +225,68 @@ def compute_total_solved(progress, external_totals, all_questions=None):
     return max(dsa_done, external_total)
 
 
+def _get_field(user_doc, name, default=None):
+    """Get a field from a raw dict or a ``UserWrapper`` (Flask-Login) object."""
+    if user_doc is None:
+        return default
+    try:
+        return user_doc.get(name, default)
+    except (TypeError, AttributeError):
+        pass
+    try:
+        return getattr(user_doc, name)
+    except AttributeError:
+        return default
+
+
+def get_merged_daily_counts(user_doc):
+    """Return merged flat dict of daily counts, preferring per-platform data with legacy fallback.
+
+    Uses the new ``platform_calendars`` dict (``{platform: {date: count}}``) when available.
+    A special ``_legacy`` key stores the old combined totals during the migration period;
+    for dates that overlap with real per-platform data the higher of the two values is kept
+    (so non-migrated platform contributions are not lost).  Dates from the legacy
+    ``external_daily_counts`` field are merged using ``max()`` so older cumulative history
+    is not lost when per-platform calendars have partial coverage (e.g. limited API windows).
+
+    Falls back entirely to ``external_daily_counts`` when no per-platform data exists.
+    """
+    platform_calendars = _get_field(user_doc, "platform_calendars", {})
+    if isinstance(platform_calendars, dict) and platform_calendars:
+        legacy_fallback = {}
+        calendars = {}
+        for key, value in platform_calendars.items():
+            if key == "_legacy" and isinstance(value, dict):
+                legacy_fallback = value
+            else:
+                calendars[key] = value
+
+        merged = {}
+        for _platform, counts in calendars.items():
+            if isinstance(counts, dict):
+                for date, count in counts.items():
+                    safe = coerce_non_negative_number(count)
+                    if safe > 0:
+                        merged[date] = merged.get(date, 0) + safe
+
+        for date, count in legacy_fallback.items():
+            safe = coerce_non_negative_number(count)
+            if safe > 0:
+                merged[date] = max(merged.get(date, 0), safe)
+
+        legacy = _get_field(user_doc, "external_daily_counts", {})
+        if isinstance(legacy, dict):
+            for date, count in legacy.items():
+                safe = coerce_non_negative_number(count)
+                if safe > 0:
+                    merged[date] = max(merged.get(date, 0), safe)
+
+        if merged:
+            return merged
+        return legacy if legacy else {}
+    return _get_field(user_doc, "external_daily_counts", {})
+
+
 def compute_c_score(user_doc, all_questions=None):
     """Compute composite C-Score (0-999) for a user document."""
     progress = user_doc.get("progress", {})
@@ -221,13 +303,14 @@ def compute_c_score(user_doc, all_questions=None):
     gfg_total = coerce_non_negative_number(ext.get("GFG", 0))
     hr_total = coerce_non_negative_number(ext.get("HackerRank", 0))
     cn_total = coerce_non_negative_number(ext.get("Coding Ninjas", 0))
+    cw_total = coerce_non_negative_number(ext.get("Codewars", 0))
     external_total = sum(
         coerce_non_negative_number(value)
         for key, value in ext.items()
         if key in EXTERNAL_SOLVED_TOTAL_KEYS
     )
 
-    ext_daily = user_doc.get("external_daily_counts", {})
+    ext_daily = get_merged_daily_counts(user_doc)
     valid_external_days = count_valid_external_daily_entries(ext_daily)
     ext_daily_keys = valid_external_daily_keys(ext_daily)
     extra_progress_days = set()
@@ -247,7 +330,7 @@ def compute_c_score(user_doc, all_questions=None):
     s_lc_total = min(lc_total / 500, 1.0) * 200
     s_lc_diff = min((lc_easy * 1 + lc_medium * 3 + lc_hard * 6) / 1500, 1.0) * 150
     s_lc_rating = min(lc_rating / 2500, 1.0) * 200
-    s_other = min((gfg_total + hr_total + cn_total) / 300, 1.0) * 100
+    s_other = min((gfg_total + hr_total + cn_total + cw_total) / 300, 1.0) * 100
     s_consistency = min(active_days / 365, 1.0) * 100
 
     c_score = int(round(s_dsa + s_lc_total + s_lc_diff + s_lc_rating + s_other + s_consistency))
@@ -266,6 +349,7 @@ def compute_c_score(user_doc, all_questions=None):
         "gfg_total": gfg_total,
         "hr_total": hr_total,
         "cn_total": cn_total,
+        "cw_total": cw_total,
         "active_days": active_days,
         "total_solved": global_total,
     }
@@ -305,5 +389,24 @@ def merge_platform_counts(in_sheet_counts, external_totals):
         coerce_non_negative_number(ext_totals.get("HackerRank", 0)),
     )
     platforms["AtCoder"] = max(platforms["AtCoder"], coerce_non_negative_number(ext_totals.get("AtCoder", 0)))
+    platforms["Codewars"] = max(platforms["Codewars"], coerce_non_negative_number(ext_totals.get("Codewars", 0)))
 
     return platforms
+
+
+def update_computed_stats(user_id, progress, db_handle, total_questions, user_doc=None):
+    from streaks import compute_streak
+
+    dsa_done = sum(1 for p in progress.values() if p.get("done"))
+    dsa_progress = round((dsa_done / total_questions * 100) if total_questions > 0 else 0, 1)
+    merged = get_merged_daily_counts(user_doc) if user_doc else None
+    current_streak, longest_streak = compute_streak(progress, external_daily_counts=merged)
+
+    db_handle.user.update_one(
+        {"_id": user_id},
+        {"$set": {
+            "dsa_progress": dsa_progress,
+            "current_streak": current_streak,
+            "longest_streak": longest_streak,
+        }}
+    )

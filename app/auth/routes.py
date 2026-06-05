@@ -5,7 +5,9 @@ from bson import ObjectId
 from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, session, url_for
 from flask_login import UserMixin, current_user, login_required, login_user, logout_user
 
-from app.extensions import bcrypt, db, github, google, login_manager
+from app.extensions import bcrypt, cache, db, github, google, limiter, login_manager
+from app.leaderboard.cache import invalidate_leaderboard_cache
+from app.profile.sync_service import clear_profile_caches
 from app.utils import utc_now
 
 
@@ -114,6 +116,9 @@ class UserWrapper(UserMixin):
             raise AttributeError(name)
         return self._doc.get(name)
 
+    def get(self, name, default=None):
+        return self._doc.get(name, default)
+
     def reload(self):
         self._doc = db.user.find_one({"_id": self._doc["_id"]}) or self._doc
         return self
@@ -144,6 +149,7 @@ def load_user(user_id):
 
 
 @auth_bp.route("/login", methods=["GET", "POST"])
+@limiter.limit("5 per minute", methods=["POST"])
 def login():
     if current_user.is_authenticated:
         return redirect(url_for("tracker.index"))
@@ -151,7 +157,7 @@ def login():
         email = normalize_email(request.form.get("email"))
         password = request.form.get("password")
         user_doc = db.user.find_one({"email": email})
-        if user_doc and user_doc.get("password") and bcrypt.check_password_hash(user_doc["password"], password):
+        if user_doc and user_doc.get("password") and password and bcrypt.check_password_hash(user_doc["password"], password):
             user_doc = reactivate_user_if_needed(user_doc)
             login_user(UserWrapper(user_doc))
             flash(f"Welcome back, {user_doc.get('name', 'User')}! 👋", "success")
@@ -161,6 +167,7 @@ def login():
 
 
 @auth_bp.route("/register", methods=["GET", "POST"])
+@limiter.limit("3 per hour", methods=["POST"])
 def register():
     if current_user.is_authenticated:
         return redirect(url_for("tracker.index"))
@@ -239,6 +246,8 @@ def delete_account():
     user_id = current_user.id
     logout_user()
     db.user.delete_one({"_id": user_id})
+    invalidate_leaderboard_cache()
+    clear_profile_caches(cache, user_id)
     flash("Your account has been permanently deleted.", "info")
     return redirect(url_for("auth.login"))
 
@@ -266,6 +275,8 @@ def deactivate_account():
         {"_id": current_user.id},
         {"$set": {"is_deactivated": True, "deactivated_at": utc_now()}},
     )
+    invalidate_leaderboard_cache()
+    clear_profile_caches(cache, current_user.id)
     logout_user()
     flash("Your account has been deactivated. Log in again anytime to reactivate it.", "info")
     return redirect(url_for("auth.login"))
@@ -412,3 +423,7 @@ def authorize_google():
     user_doc = reactivate_user_if_needed(user_doc)
     login_user(UserWrapper(user_doc))
     return redirect(url_for("tracker.index"))
+
+
+# GSSoC Registration password complexity regex
+# Requires at least one uppercase, lowercase, digit, and special char.

@@ -71,6 +71,18 @@ PLATFORM_META = {
         "profile_url_template": "https://atcoder.jp/users/{username}",
         "search_url": ""
     },
+    "Codewars": {
+        "id": "codewars",
+        "name": "Codewars",
+        "aliases": ("codewars", "cw"),
+        "domains": ["codewars.com"],
+        "color_class": "danger",
+        "badge_class": "badge-link",
+        "brand_color": "#b1361e",
+        "icon_class": "bi-fire",
+        "profile_url_template": "https://www.codewars.com/users/{username}",
+        "search_url": ""
+    },
     "GitHub": {
         "id": "github",
         "name": "GitHub",

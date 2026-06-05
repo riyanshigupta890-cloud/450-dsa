@@ -1,13 +1,16 @@
 import json
+import logging
 import os
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
-from datetime import datetime
+from datetime import datetime, timezone
 
 import requests
 
 from app.utils import normalize_coding_ninjas_profile_id
+
+logger = logging.getLogger("flask.app")
 
 
 LEETCODE_REQUEST_TIMEOUT_SECONDS = 8
@@ -17,6 +20,7 @@ GFG_API_TIMEOUT_SECONDS = 6
 GFG_PAGE_TIMEOUT_SECONDS = 8
 ATCODER_REQUEST_TIMEOUT_SECONDS = 8
 CODING_NINJAS_REQUEST_TIMEOUT_SECONDS = 8
+CODEWARS_REQUEST_TIMEOUT_SECONDS = 8
 
 _session_local = threading.local()
 
@@ -109,7 +113,7 @@ def fetch_leetcode(username):
         calendar_data = json.loads(calendar_str) if calendar_str else {}
         result_calendar = {}
         for ts, count in calendar_data.items():
-            day = datetime.utcfromtimestamp(int(ts)).strftime("%Y-%m-%d")
+            day = datetime.fromtimestamp(int(ts), tz=timezone.utc).strftime("%Y-%m-%d")
             result_calendar[day] = result_calendar.get(day, 0) + count
         total_solved = 0
         diff_stats = {"Easy": 0, "Medium": 0, "Hard": 0}
@@ -128,7 +132,7 @@ def fetch_leetcode(username):
             "contest": contest,
         }
     except Exception as exc:
-        print("LC Error", exc)
+        logger.error(f"LeetCode stats fetch failed: {exc}")
         return {}
 
 
@@ -154,11 +158,11 @@ def fetch_leetcode_rating_history(username):
         for item in history_raw:
             if item.get("attended"):
                 ts = item.get("contest", {}).get("startTime", 0)
-                day = datetime.utcfromtimestamp(int(ts)).strftime("%Y-%m-%d")
+                day = datetime.fromtimestamp(int(ts), tz=timezone.utc).strftime("%Y-%m-%d")
                 result.append({"x": day, "y": round(float(item.get("rating", 0)), 0)})
         return sorted(result, key=lambda item: item["x"])
     except Exception as exc:
-        print("LC Rating History Error", exc)
+        logger.error(f"LeetCode rating history fetch failed: {exc}")
         return []
 
 
@@ -189,7 +193,7 @@ def fetch_lc_badges(username):
             for badge in badges_raw
         ]
     except Exception as exc:
-        print("LC Badges Error", exc)
+        logger.error(f"LeetCode badges fetch failed: {exc}")
         return []
 
 
@@ -212,7 +216,7 @@ def fetch_hr_badges(username):
             return badges, total_solved
         return [], 0
     except Exception as exc:
-        print("HR Badges Error", exc)
+        logger.error(f"HackerRank badges fetch failed: {exc}")
         return [], 0
 
 
@@ -278,7 +282,7 @@ def fetch_github(username):
 
         return {"calendar": result_calendar, "stats": stats}
     except requests.exceptions.RequestException as exc:
-        print("GH Error", exc)
+        logger.error(f"GitHub contributions fetch failed: {exc}")
         return {}
 
 
@@ -296,7 +300,7 @@ def fetch_gfg(username):
                 if total and int(total) > 0:
                     return {"total": int(total)}
         except Exception as exc:
-            print("GFG Error", exc)
+            logger.warning(f"GFG stats API method failed: {exc}")
 
         try:
             headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
@@ -311,7 +315,7 @@ def fetch_gfg(username):
                 if total:
                     return {"total": int(total)}
         except Exception as exc:
-            print("GFG Error", exc)
+            logger.warning(f"GFG practice API method failed: {exc}")
 
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120"}
         response = _get_http_session().get(
@@ -331,7 +335,7 @@ def fetch_gfg(username):
                 return {"total": int(match.group(1))}
         return {"total": 0}
     except Exception as exc:
-        print("GFG Error", exc)
+        logger.error(f"GFG stats fetch failed completely: {exc}")
         return {}
 
 
@@ -345,7 +349,7 @@ def fetch_atcoder(handle):
         if r.status_code == 200:
             return {'total': r.json().get('count', 0)}
     except Exception as e:
-        print(f'AtCoder Error: {e}')
+        logger.error(f"AtCoder stats fetch failed: {e}")
     return {}
 
 
@@ -377,7 +381,7 @@ def fetch_coding_ninjas(username):
             if total > 0:
                 return {"total": total}
     except Exception as exc:
-        print("Coding Ninjas API Error", exc)
+        logger.warning(f"Coding Ninjas API method failed: {exc}")
 
     urls = [
         f"https://www.naukri.com/code360/profile/{profile_id}",
@@ -409,10 +413,30 @@ def fetch_coding_ninjas(username):
                     if match:
                         return {"total": int(match.group(1))}
             except Exception as exc:
-                print("Coding Ninjas Error", exc)
+                logger.warning(f"Coding Ninjas profile page fetch failed: {exc}")
         return {"total": 0}
     except Exception as exc:
-        print("Coding Ninjas Error", exc)
+        logger.error(f"Coding Ninjas fetch failed completely: {exc}")
+        return {}
+
+
+def fetch_codewars(username):
+    """Fetch Codewars completed kata count, honor, and rank from public API."""
+    try:
+        response = _get_http_session().get(
+            f"https://www.codewars.com/api/v1/users/{username}",
+            timeout=CODEWARS_REQUEST_TIMEOUT_SECONDS,
+        )
+        if response.status_code == 200:
+            data = response.json()
+            total = data.get("codeChallenges", {}).get("totalCompleted", 0)
+            honor = data.get("honor", 0)
+            rank_info = data.get("ranks", {}).get("overall", {})
+            rank_name = rank_info.get("name", "")
+            return {"total": int(total or 0), "honor": int(honor or 0), "rank": rank_name}
+        return {}
+    except Exception as exc:
+        logger.error(f"Codewars stats fetch failed: {exc}")
         return {}
 
 

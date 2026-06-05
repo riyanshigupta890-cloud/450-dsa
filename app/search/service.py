@@ -2,6 +2,7 @@ import re
 from urllib.parse import quote_plus, urlparse
 
 from bson import ObjectId
+from bson.errors import InvalidId
 
 from app.extensions import db
 
@@ -158,7 +159,7 @@ def search_dsa_questions(raw_query, limit=40, db_handle=None, filters=None, prog
     if topic_id_str:
         try:
             mongo_query["topic"] = ObjectId(topic_id_str)
-        except Exception:
+        except InvalidId:
             return empty_payload()
 
     platform_name = PLATFORM_FILTER_MAP.get(platform_filter, "")
@@ -177,7 +178,7 @@ def search_dsa_questions(raw_query, limit=40, db_handle=None, filters=None, prog
             return empty_payload()
         try:
             mongo_query["_id"] = {"$in": [ObjectId(question_id) for question_id in ids]}
-        except Exception:
+        except InvalidId:
             return empty_payload()
 
     projection = {"problem": 1, "topic": 1, "url": 1, "url2": 1, "editorial_links": 1}
@@ -186,19 +187,18 @@ def search_dsa_questions(raw_query, limit=40, db_handle=None, filters=None, prog
         or difficulty_filter in DIFFICULTY_FILTERS
         or status_filter == "undone"
     )
-    fetch_limit = limit * 4 if post_fetch_filters else limit
+    fetch_limit = None if requested_platforms else (limit * 4 if post_fetch_filters else limit)
     if difficulty_filter in DIFFICULTY_FILTERS:
         projection["difficulty"] = 1
 
     if query_tokens:
         projection["score"] = {"$meta": "textScore"}
-        cursor = (
-            db_handle.question.find(mongo_query, projection)
-            .sort([("score", {"$meta": "textScore"})])
-            .limit(fetch_limit)
-        )
+        cursor = db_handle.question.find(mongo_query, projection).sort([("score", {"$meta": "textScore"})])
     else:
-        cursor = db_handle.question.find(mongo_query, projection).limit(fetch_limit)
+        cursor = db_handle.question.find(mongo_query, projection)
+
+    if fetch_limit is not None:
+        cursor = cursor.limit(fetch_limit)
 
     questions = list(cursor)
     topic_ids = list({question.get("topic") for question in questions if question.get("topic")})
