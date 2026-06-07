@@ -16,7 +16,6 @@ from app.platforms.fetchers import (
     run_fetch_jobs,
 )
 from app.utils import ensure_utc_datetime, normalize_coding_ninjas_profile_id, utc_now
-from profile_validation import validate_username
 
 logger = logging.getLogger("flask.app")
 
@@ -64,6 +63,7 @@ def build_platform_sync_jobs(
     hackerrank_username="",
     atcoder_username="",
     codechef_username="",
+    codewars_username="",
 ):
     jobs = {}
 
@@ -132,6 +132,7 @@ def sync_user_platforms(user, data, db_handle, cache_backend, now=None):
     codingninjas_username = user.codingninjas_username or ""
     atcoder_username = user.atcoder_username or ""
     codechef_username = user.codechef_username or ""
+    codewars_username = getattr(user, "codewars_username", "") or ""
 
     if "leetcode" in data:
         leetcode_username = data.get("leetcode", "").strip()
@@ -154,6 +155,9 @@ def sync_user_platforms(user, data, db_handle, cache_backend, now=None):
     if "codechef" in data:
         codechef_username = data.get("codechef", "").strip()
         update_fields["codechef_username"] = codechef_username
+    if "codewars" in data:
+        codewars_username = data.get("codewars", "").strip()
+        update_fields["codewars_username"] = codewars_username
 
     combined_daily_counts = {}
     platform_totals = {}
@@ -179,6 +183,7 @@ def sync_user_platforms(user, data, db_handle, cache_backend, now=None):
         hackerrank_username=hackerrank_username,
         atcoder_username=atcoder_username,
         codechef_username=codechef_username,
+        codewars_username=codewars_username,
     )
     platform_results, platform_errors = run_fetch_jobs(platform_jobs, max_workers=4)
 
@@ -364,3 +369,9 @@ def sync_user_platforms(user, data, db_handle, cache_backend, now=None):
     invalidate_leaderboard_cache()
     clear_profile_caches(cache_backend, user_id)
     return build_sync_platforms_response(platform_status), 200
+
+
+
+
+
+

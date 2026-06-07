@@ -15,6 +15,7 @@ class FakeUser:
         self.codingninjas_username = kwargs.get("codingninjas_username", "")
         self.atcoder_username = kwargs.get("atcoder_username", "")
         self.codewars_username = kwargs.get("codewars_username", "")
+        self.codechef_username = kwargs.get("codechef_username", "")
         self.platform_calendars = kwargs.get("platform_calendars", {})
         self.external_daily_counts = kwargs.get("external_daily_counts", {})
         self.external_totals = kwargs.get("external_totals", {})
@@ -463,3 +464,4 @@ def test_sync_codewars_handles_null_value(monkeypatch):
     assert status_code == 200
     # None normalizes to empty string → no fetch job enqueued → skipped
     assert payload["platforms"]["codewars"]["status"] == "skipped"
+
