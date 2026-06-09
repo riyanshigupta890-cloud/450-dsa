@@ -369,9 +369,3 @@ def sync_user_platforms(user, data, db_handle, cache_backend, now=None):
     invalidate_leaderboard_cache()
     clear_profile_caches(cache_backend, user_id)
     return build_sync_platforms_response(platform_status), 200
-
-
-
-
-
-

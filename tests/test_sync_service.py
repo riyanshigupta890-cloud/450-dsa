@@ -464,4 +464,3 @@ def test_sync_codewars_handles_null_value(monkeypatch):
     assert status_code == 200
     # None normalizes to empty string → no fetch job enqueued → skipped
     assert payload["platforms"]["codewars"]["status"] == "skipped"
-
