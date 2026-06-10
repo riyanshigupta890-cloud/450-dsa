@@ -22,7 +22,7 @@ logger = logging.getLogger("flask.app")
 SYNC_COOLDOWN_SECONDS = 600
 
 PLATFORM_KEYS = {"leetcode", "github", "gfg", "hackerrank",
-                 "codingninjas", "atcoder", "codewars"}
+                 "codingninjas", "atcoder", "codewars", "codechef"}
 
 PLATFORM_TOTAL_KEYS = {
     "leetcode": {"LeetCode", "LeetCode_Easy", "LeetCode_Medium", "LeetCode_Hard",
@@ -33,6 +33,7 @@ PLATFORM_TOTAL_KEYS = {
     "hackerrank": {"HackerRank"},
     "atcoder": {"AtCoder"},
     "codewars": {"Codewars"},
+    "codechef": {"CodeChef", "CodeChef_Rating", "CodeChef_HighestRating", "CodeChef_Contests"},
 }
 
 
@@ -102,7 +103,8 @@ def build_platform_sync_jobs(
 
     if codechef_username:
         jobs["codechef"] = lambda: fetch_codechef(codechef_username)
-
+    if codewars_username:
+        jobs["codewars"] = lambda: fetch_codewars(codewars_username)
     return jobs
 
 
@@ -153,10 +155,10 @@ def sync_user_platforms(user, data, db_handle, cache_backend, now=None):
         atcoder_username = data.get("atcoder", "").strip()
         update_fields["atcoder_username"] = atcoder_username
     if "codechef" in data:
-        codechef_username = data.get("codechef", "").strip()
+        codechef_username = str(data.get("codechef") or "").strip()
         update_fields["codechef_username"] = codechef_username
     if "codewars" in data:
-        codewars_username = data.get("codewars", "").strip()
+        codewars_username = str(data.get("codewars") or "").strip()
         update_fields["codewars_username"] = codewars_username
 
     combined_daily_counts = {}
@@ -349,7 +351,7 @@ def sync_user_platforms(user, data, db_handle, cache_backend, now=None):
         user_platforms = set()
         for attr in ("leetcode_username", "github_username", "gfg_username",
                      "hackerrank_username", "codingninjas_username",
-                     "atcoder_username", "codewars_username"):
+                     "atcoder_username", "codewars_username", "codechef_username"):
             if getattr(user, attr, ""):
                 platform_name = attr.replace("_username", "")
                 user_platforms.add(platform_name)
@@ -369,3 +371,10 @@ def sync_user_platforms(user, data, db_handle, cache_backend, now=None):
     invalidate_leaderboard_cache()
     clear_profile_caches(cache_backend, user_id)
     return build_sync_platforms_response(platform_status), 200
+
+
+
+
+
+
+

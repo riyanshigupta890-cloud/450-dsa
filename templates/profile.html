@@ -622,29 +622,18 @@ window.handleQuickSync = function(btn) {
   const cn = '{{ user.codingninjas_username or "" }}';
   const ac = '{{ user.atcoder_username or "" }}';
   const cc = '{{ user.codechef_username or "" }}';
-  if(!lc && !gh && !gfg && !hr && !cn && !ac && !cc){{
-  const lc = {{ (user.leetcode_username or "")|tojson }};
-  const gh = {{ (user.github_username or "")|tojson }};
-  const gfg = {{ (user.gfg_username or "")|tojson }};
-  const hr = {{ (user.hackerrank_username or "")|tojson }};
-  const cn = {{ (user.codingninjas_username or "")|tojson }};
-  const ac = {{ (user.atcoder_username or "")|tojson }};
-  const cw = {{ (user.codewars_username or "")|tojson }};
-  
-  if(!lc && !gh && !gfg && !hr && !cn && !ac && !cw){
+  const cw = '{{ user.codewars_username or "" }}';
+  if(!lc && !gh && !gfg && !hr && !cn && !ac && !cc && !cw){
     showToast('⚠️ No platforms connected to sync!');
     return;
   }
-
   btn.disabled = true;
   window.setIconBusyState(icon, { busy: true, idleClassName: 'bi bi-arrow-clockwise' });
   showToast('⏳ Syncing profiles...');
-  
   fetch(endpointConfig.syncPlatforms, {
     method:'POST',
     headers:{'Content-Type':'application/json','X-CSRFToken':csrfToken},
-    body:JSON.stringify({leetcode:lc,github:gh,gfg:gfg,hackerrank:hr,codingninjas:cn,atcoder:ac,codechef:cc})
-    body:JSON.stringify({leetcode:lc,github:gh,gfg:gfg,hackerrank:hr,codingninjas:cn,atcoder:ac,codewars:cw})
+    body:JSON.stringify({leetcode:lc,github:gh,gfg:gfg,hackerrank:hr,codingninjas:cn,atcoder:ac,codechef:cc,codewars:cw})
   })
   .then(r => r.json())
   .then(res => {
@@ -912,3 +901,5 @@ function handlePhotoUpload(e){
 </style>
 
 {% endblock %}
+
+
